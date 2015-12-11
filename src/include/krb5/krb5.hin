@@ -182,6 +182,11 @@ typedef krb5_int32 krb5_cryptotype;
 typedef krb5_int32      krb5_preauthtype; /* This may change, later on */
 typedef krb5_int32      krb5_flags;
 typedef krb5_int32      krb5_timestamp;
+
+/**
+ * Used for conveying an operations status. Successful operations are indicated
+ * using the value 0, and any other values will be com_err codes.
+ */
 typedef krb5_int32      krb5_error_code;
 typedef krb5_int32      krb5_deltat;
 
