@@ -1,7 +1,8 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /* kdc/main.c - Main procedure body for the KDC server process */
 /*
- * Copyright 1990,2001,2008,2009 by the Massachusetts Institute of Technology.
+ * Copyright 1990,2001,2008,2009,2016 by the Massachusetts Institute of
+ * Technology.
  *
  * Export of this software from the United States of America may
  *   require a specific license from the United States Government.
@@ -979,7 +980,7 @@ int main(int argc, char **argv)
             port = strtol(cp, &cp, 10);
             if (cp == 0)
                 break;
-            retval = loop_add_udp_port(port);
+            retval = loop_add_udp_port(port, NULL);
             if (retval)
                 goto net_init_error;
         }
@@ -993,7 +994,7 @@ int main(int argc, char **argv)
             port = strtol(cp, &cp, 10);
             if (cp == 0)
                 break;
-            retval = loop_add_tcp_port(port);
+            retval = loop_add_tcp_port(port, NULL);
             if (retval)
                 goto net_init_error;
         }

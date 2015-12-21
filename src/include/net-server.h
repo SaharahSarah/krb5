@@ -1,7 +1,7 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /* include/net-server.h */
 /*
- * Copyright (C) 2010 by the Massachusetts Institute of Technology.
+ * Copyright (C) 2010, 2016 by the Massachusetts Institute of Technology.
  * All rights reserved.
  *
  * Export of this software from the United States of America may
@@ -31,6 +31,11 @@
 
 #include <verto.h>
 
+/**
+ * The delimeter characters supported by the addresses string.
+ */
+#define ADDRESSES_DELIM ",; "
+
 typedef struct _krb5_fulladdr {
     krb5_address *      address;
     krb5_ui_4           port;
@@ -41,12 +46,97 @@ void init_addr(krb5_fulladdr *, struct sockaddr *);
 
 /* exported from net-server.c */
 verto_ctx *loop_init(verto_ev_type types);
-krb5_error_code loop_add_udp_port(int port);
-krb5_error_code loop_add_tcp_port(int port);
-krb5_error_code loop_add_rpc_service(int port, u_long prognum, u_long versnum,
-                                     void (*dispatch)());
+
+/**
+ * Add UDP addresses to the loop.
+ *
+ * @param default_port
+ *      The port for the UDP socket(s) if not specified in the addresses.
+ * @param addresses
+ *      The optional addresses for the UDP socket. Pass NULL for the wildcard
+ *      address. Supported delimeters are currently {@ref ADDRESSES_DELIM}.
+ *      An optional port number, separated from the address by a colon, may be
+ *      included.  If the name or address contains colons (for example, if it
+ *      is an IPv6 address), enclose it in square brackets to distinguish the
+ *      colon from a port separator.
+ * @return
+ *      0 on success, an error code otherwise.
+ *
+ * @see address(int, const char *)
+ * @see loop_add_rpc_service(int, const char *, u_long, u_long, void (*)())
+ */
+krb5_error_code loop_add_udp_address(int default_port,
+                                     /*@null@*/ const char *addresses);
+
+/**
+ * Add TCP addresses to the loop.
+ *
+ * @param default_port
+ *      The port for the TCP socket(s) if not specified in the addresses.
+ * @param addresses
+ *      The optional addresses for the TCP socket.  Pass NULL for the wildcard
+ *      address.  Supported delimeters are currently {@ref ADDRESSES_DELIM}.
+ *      An optional port number, separated from the address by a colon, may be
+ *      included.  If the name or address contains colons (for example, if it
+ *      is an IPv6 address), enclose it in square brackets to distinguish the
+ *      colon from a port separator.
+ * @return
+ *      0 on success, an error code otherwise.
+ *
+ * @see address(int, const char *)
+ * @see loop_add_rpc_service(int, const char *, u_long, u_long, void (*)())
+ */
+krb5_error_code loop_add_tcp_address(int default_port,
+                                     /*@null@*/ const char *addresses);
+
+/**
+ * Add RPC service addresses to the loop.
+ *
+ * @param default_port
+ *      The port for the RPC socket(s) if not specified in the addresses.
+ * @param addresses
+ *      The optional addresses for the RPC socket. Pass NULL for the wildcard
+ *      address. Supported delimeters are currently {@ref ADDRESSES_DELIM}.
+ *      An optional port number, separated from the address by a colon, may be
+ *      included.  If the name or address contains colons (for example, if it
+ *      is an IPv6 address), enclose it in square brackets to distinguish the
+ *      colon from a port separator.
+ * @param prognum TODO
+ * @param versnum TODO
+ * @param dispatchfn TODO
+ *
+ * @return
+ *      0 on success, an error code otherwise.
+ *
+ * @see address(int, const char *)
+ * @see address(int, const char *)
+ */
+krb5_error_code loop_add_rpc_service(int default_port,
+                                     /*@null@*/ const char *addresses,
+                                     u_long prognum, u_long versnum,
+                                     void (*dispatchfn)());
+
 krb5_error_code loop_setup_routing_socket(verto_ctx *ctx, void *handle,
                                           const char *progname);
+/**
+ * Setup the network for the loop. The server will bind to the addresses added.
+ *
+ * @param ctx
+ *      The Verto context to use for the event loop.
+ * @param handle
+ *      The server handle.
+ * @param prog
+ *      The program name.
+ * @return
+ *      0 on success, otherwise an error code:
+ *      EINVAL if no addresses have been added.
+ *      NOTE: In all other error cases, the loop will cause the process to
+ *      exit.
+ *
+ * @see address(int, const char *)
+ * @see address(int, const char *)
+ * @see loop_add_rpc_service(int, const char *, u_long, u_long, void (*)())
+ */
 krb5_error_code loop_setup_network(verto_ctx *ctx, void *handle,
                                    const char *progname);
 krb5_error_code loop_setup_signals(verto_ctx *ctx, void *handle,
