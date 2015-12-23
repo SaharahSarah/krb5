@@ -157,6 +157,53 @@ write_pid_file(const char *pid_file)
     return st1 ? st1 : st2;
 }
 
+/**
+ * Setup the loop network addresses.
+ *
+ * @param proponly
+ *      If {@c proponly} is set, don't set up ports for kpasswd or kadmin.
+ * @return
+ *      0 on success, otherwise an error code.
+ */
+static krb5_error_code
+setup_loop_addresses(int proponly)
+{
+    krb5_error_code ret;
+    kadm5_server_handle_t handle = global_server_handle;
+
+    if (!proponly) {
+        /* Bind a udp socket to the kpasswd port. */
+        ret = loop_add_udp_address(handle->params.kpasswd_port,
+                                handle->params.kpasswd_listen);
+        if (ret)
+            return ret;
+        /* Bind a tcp socket to the kpasswd port. */
+        ret = loop_add_tcp_address(handle->params.kpasswd_port,
+                                handle->params.kpasswd_listen);
+        if (ret)
+            return ret;
+        /* Bind an rpc service socket to the kadmind port. */
+        ret = loop_add_rpc_service(handle->params.kadmind_port,
+                                   handle->params.kadmind_listen,
+                                   KADM, KADMVERS, kadm_1);
+        if (ret)
+            return ret;
+    }
+#ifndef DISABLE_IPROP
+        /* Bind an rpc service socket to the iprop port if enabled. */
+    if (handle->params.iprop_enabled) {
+        ret = loop_add_rpc_service(handle->params.iprop_port,
+                                   handle->params.kadmind_listen,
+                                   KRB5_IPROP_PROG, KRB5_IPROP_VERS,
+                                   krb5_iprop_prog_1);
+        if (ret)
+            return ret;
+    }
+#endif
+
+    return ret;
+}
+
 /* Set up the main loop.  If proponly is set, don't set up ports for kpasswd or
  * kadmin.  May set *ctx_out even on error. */
 static krb5_error_code
@@ -164,7 +211,6 @@ setup_loop(int proponly, verto_ctx **ctx_out)
 {
     krb5_error_code ret;
     verto_ctx *ctx;
-    kadm5_server_handle_t handle = global_server_handle;
 
     *ctx_out = ctx = loop_init(VERTO_EV_TYPE_SIGNAL);
     if (ctx == NULL)
@@ -172,27 +218,11 @@ setup_loop(int proponly, verto_ctx **ctx_out)
     ret = loop_setup_signals(ctx, global_server_handle, NULL);
     if (ret)
         return ret;
-    if (!proponly) {
-        ret = loop_add_udp_port(handle->params.kpasswd_port, NULL);
-        if (ret)
-            return ret;
-        ret = loop_add_tcp_port(handle->params.kpasswd_port, NULL);
-        if (ret)
-            return ret;
-        ret = loop_add_rpc_service(handle->params.kadmind_port, NULL, KADM,
-                                 KADMVERS, kadm_1);
-        if (ret)
-            return ret;
-    }
-#ifndef DISABLE_IPROP
-    if (handle->params.iprop_enabled) {
-        ret = loop_add_rpc_service(handle->params.iprop_port, NULL,
-                                 KRB5_IPROP_PROG, KRB5_IPROP_VERS,
-                                 krb5_iprop_prog_1);
-        if (ret)
-            return ret;
-    }
-#endif
+
+    ret = setup_loop_addresses(proponly);
+    if (ret)
+        return ret;
+
     ret = loop_setup_routing_socket(ctx, global_server_handle, progname);
     if (ret)
         return ret;
@@ -572,3 +602,4 @@ main(int argc, char *argv[])
     krb5_free_context(context);
     exit(2);
 }
+

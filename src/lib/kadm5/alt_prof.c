@@ -1,8 +1,8 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /* lib/kadm5/alt_prof.c */
 /*
- * Copyright 1995,2001,2008,2009 by the Massachusetts Institute of Technology.
- * All Rights Reserved.
+ * Copyright 1995,2001,2008,2009,2016 by the Massachusetts Institute of
+ * Technology. All Rights Reserved.
  *
  * Export of this software from the United States of America may
  *   require a specific license from the United States Government.
@@ -590,6 +590,14 @@ krb5_error_code kadm5_get_config_params(krb5_context context,
     /* Get the name of the dict file. */
     GET_STRING_PARAM(dict_file, KADM5_CONFIG_DICT_FILE, KRB5_CONF_DICT_FILE,
                      NULL);
+
+    /* Get the kadmind listen addresses. */
+    GET_STRING_PARAM(kadmind_listen,
+                     KADM5_CONFIG_KADMIND_LISTEN,
+                     KRB5_CONF_KADMIND_LISTEN, NULL);
+
+    GET_STRING_PARAM(kpasswd_listen, KADM5_CONFIG_KPASSWD_LISTEN,
+                     KRB5_CONF_KPASSWD_LISTEN, NULL);
 
 #define GET_PORT_PARAM(FIELD, BIT, CONFTAG, DEFAULT)            \
     get_port_param(&params.FIELD, params_in->FIELD,             \
