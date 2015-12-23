@@ -1,4 +1,4 @@
-# Copyright (C) 2010 by the Massachusetts Institute of Technology.
+# Copyright (C) 2010, 2016 by the Massachusetts Institute of Technology.
 # All rights reserved.
 
 # Export of this software from the United States of America may
@@ -1120,8 +1120,8 @@ _default_kdc_conf = {
             'dictfile': '$testdir/dictfile',
             'kadmind_port': '$port1',
             'kpasswd_port': '$port2',
-            'kdc_ports': '$port0',
-            'kdc_tcp_ports': '$port0'}},
+            'kdc_listen': '$port0',
+            'kdc_tcp_listen': '$port0'}},
     'dbmodules': {
         'db_module_dir': '$plugins/kdb',
         'db': {'db_library': 'db2', 'database_name' : '$testdir/db'}},

@@ -1,7 +1,7 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /* kdc/realm_data.h */
 /*
- * Copyright (C) 2012 by the Massachusetts Institute of Technology.
+ * Copyright (C) 2012, 2016 by the Massachusetts Institute of Technology.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -64,8 +64,8 @@ typedef struct __kdc_realm_data {
     /*
      * Other per-realm data.
      */
-    char                *realm_ports;   /* Per-realm KDC UDP port */
-    char                *realm_tcp_ports; /* Per-realm KDC TCP port */
+    char                *realm_listen;   /* Per-realm KDC UDP listen */
+    char                *realm_tcp_listen; /* Per-realm KDC TCP listen */
     /*
      * Per-realm parameters.
      */
