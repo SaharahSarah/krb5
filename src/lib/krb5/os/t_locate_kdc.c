@@ -122,7 +122,7 @@ main (int argc, char *argv[])
     switch (how) {
     case LOOKUP_CONF:
         err = krb5_locate_srv_conf(ctx, &realm, "kdc", &sl,
-                                   htons(88), htons(750));
+                                   htons(88));
         break;
 
     case LOOKUP_DNS:
