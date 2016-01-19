@@ -1,7 +1,7 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
  * Copyright (C) 1989,1990,1991,1992,1993,1994,1995,2000,2001,
- * 2003,2006,2007,2008,2009 by the Massachusetts Institute of Technology,
+ * 2003,2006,2007,2008,2009,2016 by the Massachusetts Institute of Technology,
  * Cambridge, MA, USA.  All Rights Reserved.
  *
  * This software is being provided to you, the LICENSEE, by the
@@ -1734,6 +1734,10 @@ krb5_encode_kdc_rep(krb5_context, krb5_msgtype, const krb5_enc_kdc_rep_part *,
                     int using_subkey, const krb5_keyblock *, krb5_kdc_rep *,
                     krb5_data ** );
 
+krb5_error_code
+k5_parse_host_string(const char *host, int default_port, char **host_out,
+                  int *port_out);
+int k5_is_string_numeric(const char *s);
 /*
  * [De]Serialization Handle and operations.
  */
