@@ -344,10 +344,11 @@ loop_setup_signals(verto_ctx *ctx, void *handle, void (*reset)())
     return 0;
 }
 
-/**
+/*
  * Add a bind address to the loop.
  *
- * @param address
+ * Arguments:
+ * - address
  *      A string for the address. Pass NULL to use the wildcard address (binds
  *      to all interfaces). An optional port number, separated from the address
  *      by a colon, may be included.  If the name or address contains colons
@@ -356,24 +357,23 @@ loop_setup_signals(verto_ctx *ctx, void *handle, void (*reset)())
  *      NOTE: Currently getaddrinfo is used with no restrictions, so in theory
  *      a hostname could work. Whether or not to allow that feature is up to
  *      the implementer.
- * @param port
+ * - port
  *      What port the socket should be set to.
- * @param type
- *      @ref bind_type for the socket.
- * @param rpc_data
+ * - type
+ *      bind_type for the socket.
+ * - rpc_data
  *      An optional rpc_svc_data containing the rpc data needed for an rpc
- *      connection. Required when {@c type} is {@c rpc}, otherwise should
- *      be NULL, but the value is ignored.
+ *      connection. Required when type is rpc, otherwise should be NULL, but
+ *      the value is ignored.
  *
- * @return
- *      0 on success, otherwise an error code.
+ * returns 0 on success, otherwise an error code.
  *
  */
 static krb5_error_code
-loop_add_address(/*@null@*/ const char *address,
+loop_add_address(/* NULL */ const char *address,
                             int port,
                             enum bind_type type,
-                 /*@null@*/ struct rpc_svc_data *rpc_data)
+                 /* NULL */ struct rpc_svc_data *rpc_data)
 {
     int     i;
     void   *tmp;
@@ -448,34 +448,32 @@ loop_add_address(/*@null@*/ const char *address,
     return ret;
 }
 
-/**
+/*
  * Add bind addresses to the loop.
  *
- * @param addresses
+ * Arguments:
+ *
+ * - addresses
  *      A string for the addresses. Pass NULL to use the wildcard address
- *      (binds to all interfaces). Supported delimeters are currently
- *      {@ref ADDRESSES_DELIM}.
+ *      (binds to all interfaces). Supported delimeters can be found in
+ *      ADDRESSES_DELIM.
  *      NOTE: Currently getaddrinfo is used with no restrictions, so in theory
  *      a hostname could work. Whether or not to allow that feature is up to
  *      the implementer.
- * @param default_port
+ * - default_port
  *      What port the socket should be set to if not specified in addresses.
- * @param type
- *      @ref bind_type for the socket.
- * @param rpc_data
- *      An optional {@c rpc_svc_data} containing the rpc data needed for an rpc
- *      connection. Required when {@c type} is {@c rpc}, otherwise should
- *      be NULL, but the value is ignored.
- *
- * @return
- *      0 on success, otherwise an error code.
- *
+ * - type
+ *      bind_type for the socket.
+ * - rpc_data
+ *      An optional rpc_svc_data containing the rpc data needed for an rpc
+ *      connection. Required when type is rpc, otherwise should be NULL, but
+ *      the value is ignored.
  */
 static krb5_error_code
-loop_add_addresses(/*@null@*/ const char *addresses,
+loop_add_addresses(/* NULL */ const char *addresses,
                    int default_port,
                    enum bind_type type,
-                   /*@null@*/ struct rpc_svc_data *rpc_data)
+                   /* NULL */ struct rpc_svc_data *rpc_data)
 {
     krb5_error_code ret;
     char *addresses_copy = NULL;
@@ -533,19 +531,19 @@ cleanup:
 }
 
 krb5_error_code
-loop_add_udp_address(int default_port, /*@null@*/ const char *addresses)
+loop_add_udp_address(int default_port, /* NULL */ const char *addresses)
 {
     return loop_add_addresses(addresses, default_port, udp, NULL);
 }
 
 krb5_error_code
-loop_add_tcp_address(int default_port, /*@null@*/ const char *addresses)
+loop_add_tcp_address(int default_port, /* NULL */ const char *addresses)
 {
     return loop_add_addresses(addresses, default_port, tcp, NULL);
 }
 
 krb5_error_code
-loop_add_rpc_service(int default_port, /*@null@*/ const char *addresses,
+loop_add_rpc_service(int default_port, /* NULL */ const char *addresses,
                      u_long prognum, u_long versnum, void (*dispatchfn)())
 {
     /* Set the rpc_svc_data values */
@@ -786,19 +784,7 @@ add_rpc_data_fd(struct socksetup *data, int sock)
 
 static const int one = 1;
 
-/**
- * Set the non-blocking io option on a socket.
- *
- * @param sock
- *      The socket to set the option on.
- * @return
- *      The return value of the ioctl call, which, to be honest, isn't very
- *      clear. It seems treating 0 and -1 as success would be a good starting
- *      point.
- *
- * @see setkeepalive(int)
- * @see setnolinger(int)
- */
+/* Set the non-blocking io option on a socket.*/
 static int
 setnbio(int sock)
 {
@@ -806,36 +792,14 @@ setnbio(int sock)
     return ioctlsocket(sock, FIONBIO, (const void *)&one);
 }
 
-/**
- * Set the keepalive option on a socket.
- *
- * @param sock
- *      The socket to set the option on.
- * @return
- *      0 on success, -1 on failure with errno set to the appropriate error
- *      code.
- *
- * @see setnbio(int)
- * @see setnolinger(int)
- */
+/* Set the keepalive option on a socket. */
 static int
 setkeepalive(int sock)
 {
     return setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof(one));
 }
 
-/**
- * Turn off the linger option on a socket.
- *
- * @param sock
- *      The socket to turn the option off.
- * @return
- *      0 on success, -1 on failure with errno set to the appropriate error
- *      code.
- *
- * @see setnbio(int)
- * @see setkeepalive(int)
- */
+/* Turn off the linger option on a socket. */
 static int
 setnolinger(int sock)
 {
@@ -1014,21 +978,7 @@ loop_setup_routing_socket(verto_ctx *ctx, void *handle, const char *progname)
     return 0;
 }
 
-/**
- * Callback for when the file descriptor is added to the verto event loop.
- *
- * @param data
- *      The socksetup data.
- * @param ba
- *      A pointer to the bind_address for this socket.
- * @param sock
- *      The socket fd that was added to the event loop.
- * @param ev
- *      The event that was added to the vent loop.
- *
- * @return
- *      0 on success, an error code otherwise.
- */
+/* Callback for when the file descriptor is added to the verto event loop. */
 typedef krb5_error_code (*on_fd_added) (struct socksetup *data,
                                   struct bind_address *ba, int sock,
                                   verto_ev *ev);
@@ -1066,27 +1016,22 @@ static const int BIND_FAMILIES[] =
     [rpc] = SOCK_STREAM
 };
 
-/**
+/*
  * Setup a socket for the server.
  *
- * @param data
- *      The socksetup data.
- * @param ba
- *      The address and port for the socket.
- * @param ai
+ * Arguments:
+ *
+ * - ba
+ *      The bind address and port for the socket.
+ * - ai
  *      The addrinfo struct to use for creating the socket.
- * @param flags
- *      The {@ref sock_flag} options for for setting up this socket.
- * @param vcb
- *      The verto_callback function for the verto event loop.
- * @param ctype
+ * - flags
+ *      The sock_flag options for for setting up this socket.
+ * - ctype
  *      The conn_type of this socket.
- * @param fdcb
+ * - fdcb
  *      An optional callback for when the socket is added to the verto event
  *      loop. May be NULL.
- *
- * @return
- *      0 on success, an error code otherwise.
  */
 static  krb5_error_code
 setup_socket(struct socksetup *data, struct bind_address *ba,
@@ -1195,15 +1140,7 @@ setup_socket(struct socksetup *data, struct bind_address *ba,
     return ret;
 }
 
-/**
- * {@ref on_fd_added } callback function rpc listener sockets.
- *
- * @copydoc on_fd_added
- *
- * TODO: @sarahday Figure out exactly what this is doing so I can explain it.
- *
- * @see on_fd_added
- */
+/* on_fd_added callback function for rpc listener sockets. */
 static krb5_error_code
 on_rpc_listener_fd_added(struct socksetup *data, struct bind_address *ba,
                          int sock, verto_ev *ev)
@@ -1241,12 +1178,10 @@ on_rpc_listener_fd_added(struct socksetup *data, struct bind_address *ba,
  *                          Get rid of me ASAP!                              *
  *****************************************************************************/
 
-/**
- * @struct WORKAROUND_setup_local_address_args
- *
- * This struct contains all the arguments that were passed to
- * {@ref WORKAROUND_setup_local_addresses}. This is necessary because of the
- * design of {@ref foreach_localaddr}.
+/*
+ * This struct contains all the arguments that are passed to
+ * WORKAROUND_setup_local_addresses. This is necessary because of the design of
+ * foreach_localaddr.
  */
 struct WORKAROUND_setup_local_address_args {
     struct socksetup *data;
@@ -1255,11 +1190,11 @@ struct WORKAROUND_setup_local_address_args {
     enum sock_flag flags;
     verto_callback *vcb;
     enum conn_type ctype;
-    on_fd_added fdcb; /*@null@*/
+    on_fd_added fdcb; /* NULL */
     int num_addresses_added;
 };
 
-/**
+/*
  * Workaround necessary for machines that lack IP PktInfo support and are
  * listening on a UDP wildcard address. Unix will take the packets in for a
  * UDP socket but is not guaranteed to send the packets out the same address.
@@ -1267,21 +1202,19 @@ struct WORKAROUND_setup_local_address_args {
  * available interface individually.
  *
  * This follows the function callback prototype necessary for
- * {@ref foreach_localaddr}.
+ * foreach_localaddr.
  *
- * @param v_args
- *      A void pointer to a {@ref WORKAROUND_setup_local_address_args}. This
- *      is passed to {@c foreach_localaddr} in the {@c data} argument.
- * @param sock_address
- *      The sock address passsed from  {@c foreach_localaddr} which should
+ * Arguments:
+ * - v_args
+ *      A void pointer to a WORKAROUND_setup_local_address_args. This
+ *      is passed to foreach_localaddr in the data argument.
+ * - sock_address
+ *      The sock address passsed from  foreach_localaddr which should
  *      have a local interface address.
- * @return
- *      As per the requirements laid out in {@c foreach_localaddr}, 0 is
- *      returned on success, while an error code is returned otherwise. Since
- *      many times a local address could fail, this doesn't actually ever
- *      return anything but 0.
  *
- * @see foreach_localaddr(void *, int (*)(), int (*)(), int (*)())
+ * As per the requirements laid out in foreach_localaddr, 0 is returned on
+ * success, while an error code is returned otherwise. Since many times a local
+ * address could fail, this doesn't actually ever return anything but 0.
  */
 static int
 WORKAROUND_setup_local_address(void *v_args, struct sockaddr *sock_address)
@@ -1324,39 +1257,37 @@ WORKAROUND_setup_local_address(void *v_args, struct sockaddr *sock_address)
     return 0;
 }
 
-/**
+/*
  * Workaround necessary for machines that lack IP PktInfo support and are
  * listening on a UDP wildcard address. Unix will take the packets in for a
  * UDP socket but is not guaranteed to send the packets out the same address.
  * krb5 requires this functionality, so it needs to bind to every single
  * available interface individually.
  *
- * @param data
- *      The {@c socksetup} data instance.
- * @param ba
- *      The {@c bind_address} of requested sockets, used for the port number.
- * @param sock_family
+ * Arguments:
+ *
+ * - ba
+ *      The bind_address for the requested socket, used for the port number.
+ * - sock_family
  *      The socket family to filter the local addresses to bind to.
- * @param flags
- *      The flags for setting up the socket.
- * @param vcb
- *      The {@c verto_callback} to connect the socket to the verto event loop.
- * @param ctype
- *      The {@c conn_type} for the socket. It should probably be {@c CONN_UDP},
+ * - flags
+ *      The sock_flag flags for setting up the socket.
+ * - ctype
+ *      The conn_type for the socket. It should probably be CONN_UDP,
  *      but I'm not going to tell you what to do.
- * @param fdcp
+ * - fdcp
  *      The optional callback to be called once the socket has been added to
- *      verto event loop. May be {@c NULL}.
- * @return
- *      0 on success, otherwise an error code. If no addresses were
- *      bound this error code will be {@c ENODEV}.
+ *      verto event loop. May be NULL.
+ *
+ * returns 0 on success, otherwise an error code. If no addresses were bound
+ * this error code will be ENODEV.
  */
 static  krb5_error_code
 WORKAROUND_setup_local_addresses(struct socksetup *data,
                                  struct bind_address *ba, int sock_family,
                                  enum sock_flag flags, verto_callback * vcb,
                                  enum conn_type ctype,
-                                 /*@null@*/on_fd_added fdcb)
+                                 /* NULL */on_fd_added fdcb)
 {
     struct WORKAROUND_setup_local_address_args args;
     int err;
@@ -1410,17 +1341,16 @@ WORKAROUND_setup_local_addresses(struct socksetup *data,
  *****************************************************************************/
 #endif /* HAVE_FULL_PKTINFO_SUPPORT */
 
-/**
+/*
  * Setup all the socket addresses that the net-server should listen to.
  *
  * This function uses getaddrinfo to figure out all the addresses. This will
  * automatically figure out which socket families that should be used on the
  * host making it useful even for wildcard addresses.
  *
- * @param data
+ * Arguments:
+ * - data
  *      A pointer to the socksetup data.
- * @return
- *      0 on success, otherwise an error code.
  */
 static  krb5_error_code
 setup_addresses(struct socksetup *data)
