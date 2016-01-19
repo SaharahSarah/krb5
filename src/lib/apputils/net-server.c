@@ -279,10 +279,11 @@ loop_setup_signals(verto_ctx *ctx, void *handle, void (*reset)())
     return 0;
 }
 
-/**
+/*
  * Add a bind address to the loop.
  *
- * @param address
+ * Arguments:
+ * - address
  *      A string for the address. Pass NULL to use the wildcard address (binds
  *      to all interfaces). An optional port number, separated from the address
  *      by a colon, may be included.  If the name or address contains colons
@@ -291,24 +292,23 @@ loop_setup_signals(verto_ctx *ctx, void *handle, void (*reset)())
  *      NOTE: Currently getaddrinfo is used with no restrictions, so in theory
  *      a hostname could work. Whether or not to allow that feature is up to
  *      the implementer.
- * @param port
+ * - port
  *      What port the socket should be set to.
- * @param type
- *      @ref bind_type for the socket.
- * @param rpc_data
+ * - type
+ *      bind_type for the socket.
+ * - rpc_data
  *      An optional rpc_svc_data containing the rpc data needed for an rpc
- *      connection. Required when {@c type} is {@c rpc}, otherwise should
- *      be NULL, but the value is ignored.
+ *      connection. Required when type is rpc, otherwise should be NULL, but
+ *      the value is ignored.
  *
- * @return
- *      0 on success, otherwise an error code.
+ * returns 0 on success, otherwise an error code.
  *
  */
 static krb5_error_code
-loop_add_address(/*@null@*/ const char *address,
+loop_add_address(/* NULL */ const char *address,
                             int port,
                             enum bind_type type,
-                 /*@null@*/ struct rpc_svc_data *rpc_data)
+                 /* NULL */ struct rpc_svc_data *rpc_data)
 {
     int     i;
     void   *tmp;
@@ -383,34 +383,32 @@ loop_add_address(/*@null@*/ const char *address,
     return ret;
 }
 
-/**
+/*
  * Add bind addresses to the loop.
  *
- * @param addresses
+ * Arguments:
+ *
+ * - addresses
  *      A string for the addresses. Pass NULL to use the wildcard address
- *      (binds to all interfaces). Supported delimeters are currently
- *      {@ref ADDRESSES_DELIM}.
+ *      (binds to all interfaces). Supported delimeters can be found in
+ *      ADDRESSES_DELIM.
  *      NOTE: Currently getaddrinfo is used with no restrictions, so in theory
  *      a hostname could work. Whether or not to allow that feature is up to
  *      the implementer.
- * @param default_port
+ * - default_port
  *      What port the socket should be set to if not specified in addresses.
- * @param type
- *      @ref bind_type for the socket.
- * @param rpc_data
- *      An optional {@c rpc_svc_data} containing the rpc data needed for an rpc
- *      connection. Required when {@c type} is {@c rpc}, otherwise should
- *      be NULL, but the value is ignored.
- *
- * @return
- *      0 on success, otherwise an error code.
- *
+ * - type
+ *      bind_type for the socket.
+ * - rpc_data
+ *      An optional rpc_svc_data containing the rpc data needed for an rpc
+ *      connection. Required when type is rpc, otherwise should be NULL, but
+ *      the value is ignored.
  */
 static krb5_error_code
-loop_add_addresses(/*@null@*/ const char *addresses,
+loop_add_addresses(/* NULL */ const char *addresses,
                    int default_port,
                    enum bind_type type,
-                   /*@null@*/ struct rpc_svc_data *rpc_data)
+                   /* NULL */ struct rpc_svc_data *rpc_data)
 {
     krb5_error_code ret;
     char *addresses_copy = NULL;
@@ -468,19 +466,19 @@ cleanup:
 }
 
 krb5_error_code
-loop_add_udp_address(int default_port, /*@null@*/ const char *addresses)
+loop_add_udp_address(int default_port, /* NULL */ const char *addresses)
 {
     return loop_add_addresses(addresses, default_port, udp, NULL);
 }
 
 krb5_error_code
-loop_add_tcp_address(int default_port, /*@null@*/ const char *addresses)
+loop_add_tcp_address(int default_port, /* NULL */ const char *addresses)
 {
     return loop_add_addresses(addresses, default_port, tcp, NULL);
 }
 
 krb5_error_code
-loop_add_rpc_service(int default_port, /*@null@*/ const char *addresses,
+loop_add_rpc_service(int default_port, /* NULL */ const char *addresses,
                      u_long prognum, u_long versnum, void (*dispatchfn)())
 {
     /* Set the rpc_svc_data values */
@@ -720,19 +718,7 @@ add_rpc_data_fd(struct socksetup *data, int sock)
 
 static const int one = 1;
 
-/**
- * Set the non-blocking io option on a socket.
- *
- * @param sock
- *      The socket to set the option on.
- * @return
- *      The return value of the ioctl call, which, to be honest, isn't very
- *      clear. It seems treating 0 and -1 as success would be a good starting
- *      point.
- *
- * @see setkeepalive(int)
- * @see setnolinger(int)
- */
+/* Set the non-blocking io option on a socket.*/
 static int
 setnbio(int sock)
 {
@@ -740,36 +726,14 @@ setnbio(int sock)
     return ioctlsocket(sock, FIONBIO, (const void *)&one);
 }
 
-/**
- * Set the keepalive option on a socket.
- *
- * @param sock
- *      The socket to set the option on.
- * @return
- *      0 on success, -1 on failure with errno set to the appropriate error
- *      code.
- *
- * @see setnbio(int)
- * @see setnolinger(int)
- */
+/* Set the keepalive option on a socket. */
 static int
 setkeepalive(int sock)
 {
     return setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof(one));
 }
 
-/**
- * Turn off the linger option on a socket.
- *
- * @param sock
- *      The socket to turn the option off.
- * @return
- *      0 on success, -1 on failure with errno set to the appropriate error
- *      code.
- *
- * @see setnbio(int)
- * @see setkeepalive(int)
- */
+/* Turn off the linger option on a socket. */
 static int
 setnolinger(int sock)
 {
@@ -778,21 +742,7 @@ setnolinger(int sock)
     return setsockopt(sock, SOL_SOCKET, SO_LINGER, &ling, sizeof(ling));
 }
 
-/**
- * Callback for when the file descriptor is added to the verto event loop.
- *
- * @param data
- *      The socksetup data.
- * @param ba
- *      A pointer to the bind_address for this socket.
- * @param sock
- *      The socket fd that was added to the event loop.
- * @param ev
- *      The event that was added to the vent loop.
- *
- * @return
- *      0 on success, an error code otherwise.
- */
+/* Callback for when the file descriptor is added to the verto event loop. */
 typedef krb5_error_code (*on_fd_added)(struct socksetup *data,
                                        struct bind_address *ba, int sock,
                                        verto_ev *ev);
@@ -830,7 +780,7 @@ static const int BIND_FAMILIES[] =
     [rpc] = SOCK_STREAM
 };
 
-/**
+/*
  * An enum map containing conn_type for each bind_type.
  */
 static const enum conn_type BIND_CONN_TYPES[] =
@@ -840,27 +790,21 @@ static const enum conn_type BIND_CONN_TYPES[] =
     [rpc] = CONN_RPC_LISTENER
 };
 
-/*
- * Setup a socket for the server.
+/* Setup a socket for the server.
  *
- * @param data
- *      The socksetup data.
- * @param ba
- *      The address and port for the socket.
- * @param ai
+ * Arguments:
+ *
+ * - ba
+ *      The bind address and port for the socket.
+ * - ai
  *      The addrinfo struct to use for creating the socket.
- * @param flags
- *      The {@ref sock_flag} options for for setting up this socket.
- * @param vcb
- *      The verto_callback function for the verto event loop.
- * @param ctype
+ * - flags
+ *      The sock_flag options for for setting up this socket.
+ * - ctype
  *      The conn_type of this socket.
- * @param fdcb
+ * - fdcb
  *      An optional callback for when the socket is added to the verto event
  *      loop. May be NULL.
- *
- * @return
- *      0 on success, an error code otherwise.
  */
 static  krb5_error_code
 setup_socket(struct socksetup *data, struct bind_address *ba,
@@ -962,15 +906,7 @@ setup_socket(struct socksetup *data, struct bind_address *ba,
     return ret;
 }
 
-/**
- * {@ref on_fd_added } callback function rpc listener sockets.
- *
- * @copydoc on_fd_added
- *
- * TODO: @sarahday Figure out exactly what this is doing so I can explain it.
- *
- * @see on_fd_added
- */
+/* on_fd_added callback function for rpc listener sockets. */
 static krb5_error_code
 on_rpc_listener_fd_added(struct socksetup *data, struct bind_address *ba,
                          int sock, verto_ev *ev)
@@ -1002,17 +938,16 @@ on_rpc_listener_fd_added(struct socksetup *data, struct bind_address *ba,
     return 0;
 }
 
-/**
+/*
  * Setup all the socket addresses that the net-server should listen to.
  *
  * This function uses getaddrinfo to figure out all the addresses. This will
  * automatically figure out which socket families that should be used on the
  * host making it useful even for wildcard addresses.
  *
- * @param data
+ * Arguments:
+ * - data
  *      A pointer to the socksetup data.
- * @return
- *      0 on success, otherwise an error code.
  */
 static  krb5_error_code
 setup_addresses(struct socksetup *data)
