@@ -71,11 +71,6 @@
 #define HAVE_PKTINFO_SUPPORT
 #endif
 
-#if defined(HAVE_PKTINFO_SUPPORT) && defined(IP_PKTINFO) && \
-    defined(IPV6_PKTINFO)
-#define HAVE_FULL_PKTINFO_SUPPORT
-#endif
-
 #ifdef HAVE_PKTINFO_SUPPORT
 #define CHECK_PKTINFO_SUPPORT 1
 #else
@@ -178,7 +173,7 @@ paddr(struct sockaddr *sa)
 /* KDC data.  */
 
 enum conn_type {
-    CONN_UDP, CONN_UDP_PKTINFO, CONN_TCP_LISTENER, CONN_TCP,
+    CONN_UDP, CONN_TCP_LISTENER, CONN_TCP,
     CONN_RPC_LISTENER, CONN_RPC,
     CONN_ROUTING
 };
@@ -1016,6 +1011,16 @@ static const int BIND_FAMILIES[] =
     [rpc] = SOCK_STREAM
 };
 
+/**
+ * An enum map containing conn_type for each bind_type.
+ */
+static const enum conn_type BIND_CONN_TYPES[] =
+{
+    [udp] = CONN_UDP,
+    [tcp] = CONN_TCP_LISTENER,
+    [rpc] = CONN_RPC_LISTENER
+};
+
 /*
  * Setup a socket for the server.
  *
@@ -1046,6 +1051,24 @@ setup_socket(struct socksetup *data, struct bind_address *ba,
 
     krb5_klog_syslog(LOG_DEBUG, _("Setting up %s socket for address %s"),
                      BIND_TYPE_NAMES[ba->type], paddr(sock_address));
+
+#ifndef IPV6_PKTINFO
+    if (sock_address->sa_family == AF_INET6 && ba->type == udp &&
+        ba->address == NULL)
+        krb5_klog_syslog(
+            LOG_INFO, _("System does not support ipv6 pktinfo yet binding to "
+                        "a ipv6 wildcard address. Packets are not guaranteed "
+                        "to return on the received address"));
+#endif
+#ifndef IP_PKTINFO
+    if (sock_address->sa_family == AF_INET && ba->type == udp &&
+        ba->address == NULL)
+        krb5_klog_syslog(
+            LOG_INFO, _("System does not support ipv4 pktinfo yet binding to "
+                        "a ipv4 wildcard address. Packets are not guaranteed "
+                        "to return on the received address"));
+#endif
+
     /* Create the socket. */
     sock = create_server_socket(data, sock_address, BIND_FAMILIES[ba->type]);
     if (sock == -1) {
@@ -1172,175 +1195,6 @@ on_rpc_listener_fd_added(struct socksetup *data, struct bind_address *ba,
     return 0;
 }
 
-#ifndef HAVE_FULL_PKTINFO_SUPPORT
-/*****************************************************************************
- *   Terrible hack to get around issues of UDP on Unix without Ip PktInfo.   *
- *                          Get rid of me ASAP!                              *
- *****************************************************************************/
-
-/*
- * This struct contains all the arguments that are passed to
- * WORKAROUND_setup_local_addresses. This is necessary because of the design of
- * foreach_localaddr.
- */
-struct WORKAROUND_setup_local_address_args {
-    struct socksetup *data;
-    struct bind_address *ba;
-    int sock_family;
-    enum sock_flag flags;
-    verto_callback *vcb;
-    enum conn_type ctype;
-    on_fd_added fdcb; /* NULL */
-    int num_addresses_added;
-};
-
-/*
- * Workaround necessary for machines that lack IP PktInfo support and are
- * listening on a UDP wildcard address. Unix will take the packets in for a
- * UDP socket but is not guaranteed to send the packets out the same address.
- * krb5 requires this functionality, so it needs to bind to every single
- * available interface individually.
- *
- * This follows the function callback prototype necessary for
- * foreach_localaddr.
- *
- * Arguments:
- * - v_args
- *      A void pointer to a WORKAROUND_setup_local_address_args. This
- *      is passed to foreach_localaddr in the data argument.
- * - sock_address
- *      The sock address passsed from  foreach_localaddr which should
- *      have a local interface address.
- *
- * As per the requirements laid out in foreach_localaddr, 0 is returned on
- * success, while an error code is returned otherwise. Since many times a local
- * address could fail, this doesn't actually ever return anything but 0.
- */
-static int
-WORKAROUND_setup_local_address(void *v_args, struct sockaddr *sock_address)
-{
-    struct WORKAROUND_setup_local_address_args *args;
-    int ret;
-
-    args = (struct WORKAROUND_setup_local_address_args *)v_args;
-
-    /* Check to make sure the sock_address family matches the request family */
-    if (sock_address->sa_family == args->sock_family) {
-        krb5_klog_syslog(LOG_DEBUG,
-                         _("Setting up socket for local address %s."),
-                         paddr(sock_address));
-        /* Set the port on the sock_address to the requested port */
-        sa_setport(sock_address, args->ba->port);
-
-        /* Now setup the socket */
-        ret = setup_socket(args->data, args->ba, sock_address, args->flags,
-                           args->vcb, args->ctype, args->fdcb);
-        if (ret != 0) {
-            args->data->retval = ret;
-            krb5_klog_syslog(LOG_ERR, _("Error adding local address %s"),
-                             paddr(sock_address));
-        } else {
-            /* Increment the num_addresses_added so that the caller will know
-             * how many addresses were successfully bound. */
-            args->num_addresses_added++;
-        }
-    } else {
-        krb5_klog_syslog(LOG_DEBUG,
-                         _("Skipping local address because it does not "
-                           "match requested family"));
-    }
-
-    /*
-     * Return 0 as some local addresses might fail binding, and all we really
-     * need is 1.
-     */
-    return 0;
-}
-
-/*
- * Workaround necessary for machines that lack IP PktInfo support and are
- * listening on a UDP wildcard address. Unix will take the packets in for a
- * UDP socket but is not guaranteed to send the packets out the same address.
- * krb5 requires this functionality, so it needs to bind to every single
- * available interface individually.
- *
- * Arguments:
- *
- * - ba
- *      The bind_address for the requested socket, used for the port number.
- * - sock_family
- *      The socket family to filter the local addresses to bind to.
- * - flags
- *      The sock_flag flags for setting up the socket.
- * - ctype
- *      The conn_type for the socket. It should probably be CONN_UDP,
- *      but I'm not going to tell you what to do.
- * - fdcp
- *      The optional callback to be called once the socket has been added to
- *      verto event loop. May be NULL.
- *
- * returns 0 on success, otherwise an error code. If no addresses were bound
- * this error code will be ENODEV.
- */
-static  krb5_error_code
-WORKAROUND_setup_local_addresses(struct socksetup *data,
-                                 struct bind_address *ba, int sock_family,
-                                 enum sock_flag flags, verto_callback * vcb,
-                                 enum conn_type ctype,
-                                 /* NULL */on_fd_added fdcb)
-{
-    struct WORKAROUND_setup_local_address_args args;
-    int err;
-
-    /* Add the arguments to the argument struct */
-    args.data = data;
-    args.ba = ba;
-    args.sock_family = sock_family;
-    args.flags = flags;
-    args.vcb = vcb;
-    args.ctype = ctype;
-    args.fdcb = fdcb;
-    /*
-     * Keep track of the number of addresses added. If this ends up being 0
-     * then nothing was bound. I doubt that the caller would be fine with that.
-     */
-    args.num_addresses_added = 0;
-
-    /*
-     * Loop through all of the local addresses and send the results to
-     * WORKAROUND_setup_local_address.
-     */
-    err = foreach_localaddr(&args, &WORKAROUND_setup_local_address,
-                            NULL, NULL);
-    if (err != 0) {
-        krb5_klog_syslog(LOG_ERR,
-                         _("Error encountered trying to add local "
-                           "UDP addresses."));
-        return data->retval;
-    }
-
-    if (args.num_addresses_added == 0) {
-        krb5_klog_syslog(LOG_ERR,
-                         _("Could not find any local addresses to "
-                           "bind for UDP."));
-        /*
-         * Returning ENODEV in this case. There might be a better error number
-         * that I failed to see. If you change this, make sure to update the
-         * documentation in the above comment.
-         */
-        return ENODEV;
-    }
-
-    krb5_klog_syslog(LOG_INFO, _("Bound to %d local addresses"),
-                     args.num_addresses_added);
-
-    return 0;
-}
-/*****************************************************************************
- *                         End of terrible hack.                             *
- *****************************************************************************/
-#endif /* HAVE_FULL_PKTINFO_SUPPORT */
-
 /*
  * Setup all the socket addresses that the net-server should listen to.
  *
@@ -1430,6 +1284,8 @@ setup_addresses(struct socksetup *data)
             /* Set the port number for the socket. */
             sa_setport(r_next->ai_addr, val.port);
 
+            ctype = BIND_CONN_TYPES[val.type];
+
             /* Setup the socket creation flags. */
             flags = 0;
             flags |= val.type == udp || val.type == tcp ? NBIO : 0;
@@ -1446,59 +1302,6 @@ setup_addresses(struct socksetup *data)
                 /* Check for IPv6 PktInfo support. */
                 (CHECK_IPV6_PKTINFO || r_next->ai_family != AF_INET6)
                 ? PKTINFO : 0;
-
-#ifndef HAVE_FULL_PKTINFO_SUPPORT /* Only include workaround when needed */
-            /*
-             * Check if the address is wildcard, UDP, and PKTINFO was not set.
-             * In this case some special hackery needs to be done. :-/
-             */
-            if (val.type == udp && val.address == NULL && !(flags & PKTINFO)) {
-                krb5_klog_syslog(LOG_DEBUG,
-                                 _("System missing pktinfo support. "
-                                   "Trying to use local addresses."));
-                err =
-                    WORKAROUND_setup_local_addresses(data, &val,
-                                                     r_next->ai_family,
-                                                     flags,
-                                                     VERTO_CALLBACK[val.type],
-                                                     CONN_UDP,
-                                                     FD_ADDED_CALLBACK
-                                                     [val.type]);
-                if (err != 0) {
-                    ret = err;
-                    goto cleanup;
-                }
-
-                krb5_klog_syslog(LOG_DEBUG,
-                                 _("Successfully bound to local addresses"));
-                /* We're done here, so continue to the next result. */
-                continue;
-            }
-#endif /* End of workaround for when pktinfo isn't available. */
-
-            /* Figure out the conn_type for the socket. */
-
-            /*
-             * TODO @sarahday Figure out a better way to do this. The two
-             * different udp connection types are adding this ugly code.
-             */
-            switch (val.type) {
-            case udp:
-                if (flags & PKTINFO)
-                    ctype = CONN_UDP_PKTINFO;
-                else
-                    ctype = CONN_UDP;
-                break;
-            case tcp:
-                ctype = CONN_TCP_LISTENER;
-                break;
-            case rpc:
-                ctype = CONN_RPC_LISTENER;
-                break;
-            default:
-                ret = EINVAL;
-                goto cleanup;
-            }
 
             /* Cross your fingers, it's time to setup the socket! */
             err = setup_socket(data, &val, r_next->ai_addr, flags,
@@ -1906,9 +1709,9 @@ process_packet(verto_ctx *ctx, verto_ev *ev)
 
     if (state->daddr_len == 0 && conn->type == CONN_UDP) {
         /*
-         * If the PKTINFO option isn't set, this socket should be bound to a
-         * specific local address.  This info probably should've been saved in
-         * our socket data structure at setup time.
+         * An address couldn't be obtain, so the PKTINFO option probably isn't
+         * available.  If the socket is bound to a specific address, then try
+         * to get the address here. If it fails then oh well.
          */
         state->daddr_len = sizeof(state->daddr);
         if (getsockname(state->port_fd, (struct sockaddr *)&state->daddr,
