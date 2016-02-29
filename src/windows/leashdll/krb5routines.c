@@ -643,72 +643,126 @@ Leash_krb5_error(krb5_error_code rc, LPCSTR FailedFunctionName,
 #endif //!NO_KRB5
 }
 
+#define krb5_princ_component(context, princ,i)  \
+(((i) < krb5_princ_size(context, princ))    \
+? (princ)->data + (i)                      \
+: NULL)
 
-BOOL
+static inline int
+data_eq_string (krb5_data d, const char *s)
+{
+    return (d.length == strlen(s) && (d.length == 0 ||
+    !memcmp(d.data, s, d.length)));
+}
+
+/*
+ * Returns TRUE if the kerberos principal is the name of a Kerberos ticket
+ * service.
+ */
+static krb5_boolean
+is_tgs_principal(krb5_context kcontext, krb5_const_principal principal)
+{
+    if (principal->length != 2)
+        return FALSE;
+    if (data_eq_string(*krb5_princ_component(kcontext, principal, 0),
+        KRB5_TGS_NAME))
+        return TRUE;
+    else
+        return FALSE;
+}
+
+krb5_error_code
 Leash_ms2mit(BOOL save_creds)
 {
 #ifdef NO_KRB5
     return(FALSE);
 #else /* NO_KRB5 */
-    krb5_context kcontext = 0;
+    krb5_context kcontext = NULL;
     krb5_error_code code;
-    krb5_ccache ccache=0;
-    krb5_ccache mslsa_ccache=0;
+    krb5_ccache ccache = NULL;
+    krb5_ccache mslsa_ccache = NULL;
+    krb5_cc_cursor cursor;
     krb5_creds creds;
-    krb5_cc_cursor cursor=0;
-    krb5_principal princ = 0;
-    BOOL rc = FALSE;
+    krb5_principal princ = NULL;
+    int found_tgt = 0;
 
     if ( !pkrb5_init_context )
         goto cleanup;
 
-    if (code = pkrb5_init_context(&kcontext))
+    if (code = pkrb5_init_context(&kcontext)) {
+        pcom_err("Leash", code, "while initializing kerberos library");
         goto cleanup;
-
-    if (code = pkrb5_cc_resolve(kcontext, "MSLSA:", &mslsa_ccache))
-        goto cleanup;
-
-    if ( save_creds ) {
-        if (code = pkrb5_cc_get_principal(kcontext, mslsa_ccache, &princ))
-            goto cleanup;
-
-        if (code = pkrb5_cc_default(kcontext, &ccache))
-            goto cleanup;
-
-        if (code = pkrb5_cc_initialize(kcontext, ccache, princ))
-            goto cleanup;
-
-        if (code = pkrb5_cc_copy_creds(kcontext, mslsa_ccache, ccache))
-            goto cleanup;
-
-        rc = TRUE;
-    } else {
-        /* Enumerate tickets from cache looking for an initial ticket */
-        if ((code = pkrb5_cc_start_seq_get(kcontext, mslsa_ccache, &cursor)))
-            goto cleanup;
-
-        while (!(code = pkrb5_cc_next_cred(kcontext, mslsa_ccache, &cursor, &creds)))
-        {
-            if ( creds.ticket_flags & TKT_FLG_INITIAL ) {
-                rc = TRUE;
-                pkrb5_free_cred_contents(kcontext, &creds);
-                break;
-            }
-            pkrb5_free_cred_contents(kcontext, &creds);
-        }
-        pkrb5_cc_end_seq_get(kcontext, mslsa_ccache, &cursor);
     }
 
-  cleanup:
-    if (princ)
+    if (code = pkrb5_cc_resolve(kcontext, "MSLSA:", &mslsa_ccache)) {
+        pcom_err("Leash", code, "while opening MS LSA ccache");
+        goto cleanup;
+    }
+
+    /* Enumerate tickets from cache looking for an initial ticket */
+    if ((code = pkrb5_cc_start_seq_get(kcontext, mslsa_ccache, &cursor))) {
+        pcom_err("Leash", code, "while initiating the cred sequence of MS LSA ccache");
+        goto cleanup;
+    }
+
+    while (!found_tgt) {
+        code = pkrb5_cc_next_cred(kcontext, mslsa_ccache, &cursor, &creds);
+        if (code)
+            break;
+
+        /* Check if the ticket is a TGT */
+        if (is_tgs_principal(kcontext, creds.server))
+            found_tgt = 1;
+
+        pkrb5_free_cred_contents(kcontext, &creds);
+    }
+    pkrb5_cc_end_seq_get(kcontext, mslsa_ccache, &cursor);
+
+    if (code = pkrb5_cc_set_flags(kcontext, mslsa_ccache, 0)) {
+        pcom_err("Leash", code, "while clearing flags");
+        goto cleanup;
+    }
+
+    if (!found_tgt) {
+        fprintf(stderr, "Initial Ticket Getting Tickets are not available from the MS LSA\n");
+        code = 1;
+        goto cleanup;
+    }
+
+    if (!save_creds)
+        goto cleanup;
+
+    if (code = pkrb5_cc_get_principal(kcontext, mslsa_ccache, &princ)) {
+        pcom_err("Leash", code, "while obtaining MS LSA principal");
+        goto cleanup;
+    }
+
+    code = pkrb5_cc_default(kcontext, &ccache);
+    if (code) {
+        pcom_err("Leash", code, "while getting default ccache");
+        ccache = NULL;
+        goto cleanup;
+    }
+    if (code = pkrb5_cc_initialize(kcontext, ccache, princ)) {
+        pcom_err("Leash", code, "when initializing ccache");
+        goto cleanup;
+    }
+
+    if (code = pkrb5_cc_copy_creds(kcontext, mslsa_ccache, ccache)) {
+        pcom_err("Leash", code, "while copying MS LSA ccache to default ccache");
+        goto cleanup;
+    }
+
+cleanup:
+    if (princ != NULL)
         pkrb5_free_principal(kcontext, princ);
-    if (ccache)
+    if (ccache != NULL)
         pkrb5_cc_close(kcontext, ccache);
-    if (mslsa_ccache)
+    if (mslsa_ccache != NULL)
         pkrb5_cc_close(kcontext, mslsa_ccache);
-    if (kcontext)
+    if (kcontext != NULL)
         pkrb5_free_context(kcontext);
-    return(rc);
+    return code;
 #endif /* NO_KRB5 */
 }
 

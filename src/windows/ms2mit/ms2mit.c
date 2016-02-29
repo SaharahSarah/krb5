@@ -23,6 +23,7 @@
  * or implied warranty.
  */
 
+#include "k5-int.h"
 #include "krb5.h"
 #include <stdio.h>
 #include <string.h>
@@ -122,7 +123,7 @@ main(int argc, char *argv[])
     if (!found_tgt) {
         fprintf(stderr, "%s: Initial Ticket Getting Tickets are not available from the MS LSA\n",
                 argv[0]);
-        krb5int_cc_user_set_default_name(kcontext, "MSLSA:");
+        krb5_cc_set_default_name(kcontext, "MSLSA:");
         code = 1;
         goto cleanup;
     }

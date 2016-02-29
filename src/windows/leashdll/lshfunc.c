@@ -770,7 +770,7 @@ long FAR
 Leash_importable(void)
 {
     if (IsProcessUacLimited())
-	return FALSE;
+        return FALSE;
 
     if ( !IsWindowsVista() && IsKerberosLogon() )
         return TRUE;
@@ -786,7 +786,15 @@ Leash_importable(void)
 long FAR
 Leash_import(void)
 {
-    if ( Leash_ms2mit(1) ) {
+    krb5_context ctx = 0;
+    krb5_error_code code = 0;
+    if ( !pkrb5_init_context )
+        return 1;
+
+    code = pkrb5_init_context(&ctx);
+    if (code) return 1;
+
+    if ( !Leash_ms2mit(1) ) {
         int lifetime;
         lifetime = Leash_get_default_lifetime() / 5;
 #ifndef NO_AFS
@@ -800,16 +808,10 @@ Leash_import(void)
             int   rcA = 0;
             int   rcB = 0;
 
-            krb5_context ctx = 0;
-            krb5_error_code code = 0;
             krb5_ccache cc = 0;
             krb5_principal me = 0;
 
-            if ( !pkrb5_init_context )
-                goto cleanup;
 
-            code = pkrb5_init_context(&ctx);
-            if (code) goto cleanup;
 
             code = pkrb5_cc_default(ctx, &cc);
             if (code) goto cleanup;
@@ -841,7 +843,13 @@ Leash_import(void)
         }
 #endif /* NO_AFS */
         return 1;
+    } else {
+        /* We failed importing, so set the default cache to MSLSA */
+        pkrb5int_cc_user_set_default_name(ctx, "MSLSA:");
     }
+
+    if (ctx)
+        pkrb5_free_context(ctx);
     return 0;
 }
 
@@ -2982,98 +2990,130 @@ cleanup:
     return have_tickets;
 }
 
-static void
-acquire_tkt_no_princ(krb5_context context, char * ccname, int cclen)
+static int
+try_import(krb5_context ctx)
 {
-    TicketList 		*list = NULL;
-    krb5_context        ctx;
-    DWORD 		dwMsLsaImport = Leash_get_default_mslsa_import();
-    DWORD		gle;
+    DWORD dwMsLsaImport = Leash_get_default_mslsa_import();
+    DWORD gle;
+    BOOL isCCPrinc;
     char ccachename[272]="";
-    char loginenv[16];
-    BOOL prompt;
-    BOOL haveTickets;
-
-    GetEnvironmentVariable("KERBEROSLOGIN_NEVER_PROMPT", loginenv, sizeof(loginenv));
-    prompt = (GetLastError() == ERROR_ENVVAR_NOT_FOUND);
-
-    ctx = context;
+    krb5_error_code code;
+    int import = 0;
+    static int attempted_import = 0;
 
     SetLastError(0);
     GetEnvironmentVariable("KRB5CCNAME", ccachename, sizeof(ccachename));
     gle = GetLastError();
-    if ( ((gle == ERROR_ENVVAR_NOT_FOUND) || !ccachename[0]) && context ) {
-        const char * ccdef = pkrb5_cc_default_name(ctx);
-	SetEnvironmentVariable("KRB5CCNAME", ccdef ? ccdef : NULL);
-	GetEnvironmentVariable("KRB5CCNAME", ccachename, sizeof(ccachename));
+    if (((gle == ERROR_ENVVAR_NOT_FOUND) || !ccachename[0]) && ctx) {
+        const char *ccdef = pkrb5_cc_default_name(ctx);
+        SetEnvironmentVariable("KRB5CCNAME", ccdef ? ccdef : NULL);
+        GetEnvironmentVariable("KRB5CCNAME", ccachename, sizeof(ccachename));
     }
 
-    haveTickets = cc_default_have_tickets(ctx);
-    if ((!haveTickets) &&
-        dwMsLsaImport && Leash_importable() ) {
-        // We have the option of importing tickets from the MSLSA
-        // but should we?  Do the tickets in the MSLSA cache belong
-        // to the default realm used by Leash?  Does the default
-	// ccache name specify a principal name?  Only import if we
-	// aren't going to break the default identity as specified
-	// by the user in Network Identity Manager.
-        int import = 0;
-	BOOL isCCPrinc;
+    /*
+     * If importing has already been attempted we don't want to try again. It
+     * would be a waste of time.
+     */
+    if (attempted_import)
+        return 0;
 
-	/* Determine if the default ccachename is principal name.  If so, don't
-	* import the MSLSA: credentials into it unless the names match.
-	*/
-	isCCPrinc = (strncmp("API:",ccachename, 4) == 0 && strchr(ccachename, '@'));
+    // We have the option of importing tickets from the MSLSA
+    // but should we?  Do the tickets in the MSLSA cache belong
+    // to the default realm used by Leash?  Does the default
+    // ccache name specify a principal name?  Only import if we
+    // aren't going to break the default identity as specified
+    // by the user in Network Identity Manager.
 
-        if ( dwMsLsaImport == 1 && !isCCPrinc ) { /* always import */
-            import = 1;
-        } else if ( dwMsLsaImport ) {      	  /* import when realms match */
-            krb5_error_code code;
-            krb5_ccache mslsa_ccache=NULL;
-            krb5_principal princ = NULL;
-	    char *mslsa_principal = NULL;
-            char ms_realm[128] = "", *def_realm = NULL, *r;
-            size_t i;
+    /* Determine if the default ccachename is principal name.  If so, don't
+        * import the MSLSA: credentials into it unless the names match.
+        */
+    isCCPrinc = (strncmp("API:",ccachename, 4) == 0 && strchr(ccachename, '@'));
 
-            if (code = pkrb5_cc_resolve(ctx, "MSLSA:", &mslsa_ccache))
-                goto cleanup;
+    if ( dwMsLsaImport == 1 && !isCCPrinc ) { /* always import */
+        import = 1;
+    } else if ( dwMsLsaImport ) {      	  /* import when realms match */
+        krb5_ccache mslsa_ccache=NULL;
+        krb5_principal princ = NULL;
+        char *mslsa_principal = NULL;
+        char ms_realm[128] = "", *def_realm = NULL, *r;
+        size_t i;
 
-            if (code = pkrb5_cc_get_principal(ctx, mslsa_ccache, &princ))
-                goto cleanup;
+        if (code = pkrb5_cc_resolve(ctx, "MSLSA:", &mslsa_ccache))
+            goto cleanup;
 
-            for ( r=ms_realm, i=0; i<krb5_princ_realm(ctx, princ)->length; r++, i++ ) {
-                *r = krb5_princ_realm(ctx, princ)->data[i];
-            }
-            *r = '\0';
+        if (code = pkrb5_cc_get_principal(ctx, mslsa_ccache, &princ))
+            goto cleanup;
 
-            if (code = pkrb5_get_default_realm(ctx, &def_realm))
-                goto cleanup;
-
-	    if (code = pkrb5_unparse_name(ctx, princ, &mslsa_principal))
-		goto cleanup;
-
-            import = (!isCCPrinc && !strcmp(def_realm, ms_realm)) ||
-		(isCCPrinc && !strcmp(&ccachename[4], mslsa_principal));
-
-          cleanup:
-	    if (mslsa_principal)
-		pkrb5_free_unparsed_name(ctx, mslsa_principal);
-
-            if (def_realm)
-                pkrb5_free_default_realm(ctx, def_realm);
-
-            if (princ)
-                pkrb5_free_principal(ctx, princ);
-
-            if (mslsa_ccache)
-                pkrb5_cc_close(ctx, mslsa_ccache);
+        for ( r=ms_realm, i=0; i<krb5_princ_realm(ctx, princ)->length; r++, i++ ) {
+            *r = krb5_princ_realm(ctx, princ)->data[i];
         }
+        *r = '\0';
 
-        if ( import ) {
-            Leash_import();
+        if (code = pkrb5_get_default_realm(ctx, &def_realm))
+            goto cleanup;
+
+        if (code = pkrb5_unparse_name(ctx, princ, &mslsa_principal))
+            goto cleanup;
+
+        import = (!isCCPrinc && !strcmp(def_realm, ms_realm)) ||
+        (isCCPrinc && !strcmp(&ccachename[4], mslsa_principal));
+
+        cleanup:
+        if (mslsa_principal)
+            pkrb5_free_unparsed_name(ctx, mslsa_principal);
+
+        if (def_realm)
+            pkrb5_free_default_realm(ctx, def_realm);
+
+        if (princ)
+            pkrb5_free_principal(ctx, princ);
+
+        if (mslsa_ccache)
+            pkrb5_cc_close(ctx, mslsa_ccache);
+    }
+
+    if ( import ) {
+        attempted_import = 1;
+        code = Leash_import();
+
+        /*
+            * If we failed importing the credentials then set the MSLSA cache
+            * as the default.
+            */
+        if (code) {
+            pkrb5int_cc_user_set_default_name(ctx, "MSLSA:");
+            SetEnvironmentVariable("KRB5CCNAME", "MSLSA:");
+        }
+    }
+
+    return import;
+}
+
+static void
+acquire_tkt_no_princ(krb5_context context, char * ccname, int cclen)
+{
+    TicketList 		*list = NULL;
+    krb5_context        ctx = context;
+    DWORD 		dwMsLsaImport = Leash_get_default_mslsa_import();
+    DWORD		gle;
+    const char *ccachename;
+    char loginenv[16];
+    BOOL prompt;
+    BOOL haveTickets;
+    int imported;
+
+    haveTickets = cc_default_have_tickets(ctx);
+    if (!haveTickets) {
+        imported = try_import(ctx);
+        if (imported) {
             haveTickets = cc_default_have_tickets(ctx);
         }
     }
+
+    GetEnvironmentVariable("KERBEROSLOGIN_NEVER_PROMPT", loginenv, sizeof(loginenv));
+    prompt = (GetLastError() == ERROR_ENVVAR_NOT_FOUND);
+
+    ccachename = pkrb5_cc_default_name(ctx);
 
     if ( prompt && !haveTickets ) {
 	acquire_tkt_send_msg(ctx, NULL, ccachename, NULL, ccname, cclen);
@@ -3089,8 +3129,6 @@ acquire_tkt_no_princ(krb5_context context, char * ccname, int cclen)
 	strncpy(ccname, ccachename, cclen);
 	ccname[cclen-1] = '\0';
     }
-    if ( !context )
-        pkrb5_free_context(ctx);
 }
 
 
