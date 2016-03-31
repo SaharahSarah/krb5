@@ -9,6 +9,7 @@ krb5_db_check_policy_as
 krb5_db_check_policy_tgs
 krb5_db_check_transited_realms
 krb5_db_create
+krb5_db_def_rename_principal
 krb5_db_delete_principal
 krb5_db_destroy
 krb5_db_fetch_mkey
@@ -24,6 +25,7 @@ krb5_db_lock
 krb5_db_mkey_list_alias
 krb5_db_put_principal
 krb5_db_refresh_config
+krb5_db_rename_principal
 krb5_db_set_context
 krb5_db_setup_mkey_name
 krb5_db_sign_authdata

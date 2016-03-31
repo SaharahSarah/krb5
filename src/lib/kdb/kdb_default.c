@@ -538,3 +538,52 @@ clean_n_exit:
         krb5_dbe_free_key_list(context, mkey_list_head);
     return retval;
 }
+
+krb5_error_code
+krb5_db_def_rename_principal(krb5_context kcontext,
+                             krb5_const_principal source,
+                             krb5_const_principal target)
+{
+    krb5_db_entry *kdb = NULL;
+    krb5_error_code ret;
+
+    krb5_clear_error_message(kcontext);
+
+    if (source == NULL || target == NULL)
+        return EINVAL;
+
+    ret = krb5_db_get_principal(kcontext, target,
+                                KRB5_KDB_FLAG_ALIAS_OK, &kdb);
+    if (ret == 0) {
+        ret = KRB5_KDB_INUSE;
+        goto cleanup;
+    }
+
+    ret = krb5_db_get_principal(kcontext, source,
+                                KRB5_KDB_FLAG_ALIAS_OK, &kdb);
+    if (ret)
+        goto cleanup;
+
+    /* Transform salts as necessary. */
+    ret = krb5_dbe_specialize_salt(kcontext, kdb);
+    if (ret)
+        goto cleanup;
+
+    krb5_free_principal(kcontext, kdb->princ);
+    ret = krb5_copy_principal(kcontext, target, &kdb->princ);
+    if (ret) {
+        kdb->princ = NULL; /* so freeing the dbe doesn't lose target data */
+        goto cleanup;
+    }
+
+    ret = krb5_db_put_principal(kcontext, kdb);
+    if (ret)
+        goto cleanup;
+
+    ret = krb5_db_delete_principal(kcontext, (krb5_principal)source);
+
+
+cleanup:
+    krb5_db_free_principal(kcontext, kdb);
+    return ret;
+}

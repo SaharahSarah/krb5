@@ -379,6 +379,9 @@ krb5_error_code krb5_db_put_principal ( krb5_context kcontext,
                                         krb5_db_entry *entry );
 krb5_error_code krb5_db_delete_principal ( krb5_context kcontext,
                                            krb5_principal search_for );
+krb5_error_code
+krb5_db_rename_principal(krb5_context kcontext, krb5_principal source,
+                         krb5_principal target);
 
 /*
  * Iterate over principals in the KDB.  If the callback may write to the DB,
@@ -766,6 +769,11 @@ krb5_dbe_def_encrypt_key_data( krb5_context             context,
                                krb5_key_data          * key_data);
 
 krb5_error_code
+krb5_db_def_rename_principal(krb5_context kcontext,
+                             krb5_const_principal source,
+                             krb5_const_principal target);
+
+krb5_error_code
 krb5_db_create_policy( krb5_context kcontext,
                        osa_policy_ent_t policy);
 
@@ -1034,6 +1042,14 @@ typedef struct _kdb_vftabl {
      */
     krb5_error_code (*delete_principal)(krb5_context kcontext,
                                         krb5_const_principal search_for);
+
+    /*
+     * Optional: Rename a principal. If the source principal does not exist,
+     * return KRB5_KDB_NOENTRY. If the target exists, return an error.
+     */
+    krb5_error_code (*rename_principal)(krb5_context kcontext,
+                                        krb5_const_principal source,
+                                        krb5_const_principal target);
 
     /*
      * Optional: For each principal entry in the database, invoke func with the

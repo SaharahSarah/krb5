@@ -951,6 +951,52 @@ krb5_db_delete_principal(krb5_context kcontext, krb5_principal search_for)
     return status;
 }
 
+static krb5_error_code
+log_princ_update(krb5_context kcontext, krb5_principal source, bool_t deleted)
+{
+    krb5_error_code status = 0;
+    kdb_incr_update_t upd;
+    char *princ_name = NULL;
+
+    status = krb5_unparse_name(kcontext, source, &princ_name);
+    if (status)
+        return status;
+
+    memset(&upd, 0, sizeof(kdb_incr_update_t));
+    upd.kdb_princ_name.utf8str_t_val = princ_name;
+    upd.kdb_princ_name.utf8str_t_len = strlen(princ_name);
+    upd.kdb_deleted = deleted;
+
+    status = ulog_add_update(kcontext, &upd);
+    free(princ_name);
+    return status;
+}
+
+krb5_error_code
+krb5_db_rename_principal(krb5_context kcontext, krb5_principal source,
+                         krb5_principal target)
+{
+    kdb_vftabl *v;
+    krb5_error_code status = 0;
+
+    status = get_vftabl(kcontext, &v);
+    if (status)
+        return status;
+    if (v->rename_principal == NULL)
+        return KRB5_PLUGIN_OP_NOTSUPP;
+
+    status = v->rename_principal(kcontext, source, target);
+    if (status || !logging(kcontext))
+        return status;
+
+    status = log_princ_update(kcontext, source, TRUE);
+    if (status)
+        return status;
+
+    status = log_princ_update(kcontext, target, FALSE);
+    return status;
+}
+
 /*
  * Use a proxy function for iterate so that we can sort the keys before sending
  * them to the callback.
