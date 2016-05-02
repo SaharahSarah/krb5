@@ -602,6 +602,13 @@ krb5_dbe_compute_salt(krb5_context context, const krb5_key_data *key,
                       krb5_const_principal princ, krb5_int16 *salttype_out,
                       krb5_data **salt_out);
 
+/*
+ * Transform a krb5_db_entry's key salt to be a special type. Note that the
+ * krb5_db_entry itself is modified.
+ */
+krb5_error_code
+krb5_dbe_specialize_salt(krb5_context context, krb5_db_entry *entry);
+
 krb5_error_code
 krb5_dbe_cpw( krb5_context        kcontext,
               krb5_keyblock       * master_key,

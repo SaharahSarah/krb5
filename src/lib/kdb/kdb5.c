@@ -2260,6 +2260,36 @@ krb5_dbe_compute_salt(krb5_context context, const krb5_key_data *key,
     return 0;
 }
 
+krb5_error_code
+krb5_dbe_specialize_salt(krb5_context context, krb5_db_entry *entry)
+{
+    krb5_int16 stype, i;
+    krb5_data *salt = NULL;
+    krb5_error_code ret = 0;
+
+    if (context == NULL || entry == NULL)
+        return EINVAL;
+
+    /* Transform salts as necessary. */
+    for (i = 0; i < entry->n_key_data; i++) {
+        ret = krb5_dbe_compute_salt(context, &entry->key_data[i], entry->princ,
+                                    &stype, &salt);
+        if (ret)
+            goto cleanup;
+        entry->key_data[i].key_data_type[1] = KRB5_KDB_SALTTYPE_SPECIAL;
+        free(entry->key_data[i].key_data_contents[1]);
+        entry->key_data[i].key_data_contents[1] = (krb5_octet *)salt->data;
+        entry->key_data[i].key_data_length[1] = salt->length;
+        entry->key_data[i].key_data_ver = 2;
+        free(salt);
+        salt = NULL;
+    }
+
+cleanup:
+    krb5_free_data(context, salt);
+    return ret;
+}
+
 /* change password functions */
 krb5_error_code
 krb5_dbe_cpw(krb5_context kcontext, krb5_keyblock *master_key,
