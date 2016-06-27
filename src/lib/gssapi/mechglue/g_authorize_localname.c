@@ -50,24 +50,33 @@ mech_authorize_localname(OM_uint32 *minor,
 			 const gss_union_name_t unionName,
 			 const gss_union_name_t unionUser)
 {
+	int i;
 	OM_uint32 major = GSS_S_UNAVAILABLE;
 	gss_mechanism mech;
 
-	if (unionName->mech_type == GSS_C_NO_OID)
-		return (GSS_S_NAME_NOT_MN);
+    for (i = 0; i < unionName->num_mechs; i++) {
+        if (unionName->mech_type[i] == GSS_C_NO_OID) {
+            major = GSS_S_NAME_NOT_MN;
+            continue;
+        }
 
-	mech = gssint_get_mechanism(unionName->mech_type);
-	if (mech == NULL)
-		return (GSS_S_UNAVAILABLE);
+        mech = gssint_get_mechanism(unionName->mech_type[i]);
+        if (mech == NULL) {
+            major = GSS_S_UNAVAILABLE;
+            continue;
+        }
 
-	if (mech->gssspi_authorize_localname != NULL) {
-		major = mech->gssspi_authorize_localname(minor,
-							 unionName->mech_name,
-							 unionUser->external_name,
-							 unionUser->name_type);
-		if (major != GSS_S_COMPLETE)
-			map_error(minor, mech);
-	}
+        if (mech->gssspi_authorize_localname != NULL) {
+            major = mech->gssspi_authorize_localname(minor,
+                                                     unionName->mech_name[i],
+                                                     unionUser->external_name,
+                                                     unionUser->name_type);
+            if (major == GSS_S_COMPLETE)
+                break;
+
+            map_error(minor, mech);
+        }
+    }
 
 	return (major);
 }

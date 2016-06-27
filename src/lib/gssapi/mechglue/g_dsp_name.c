@@ -83,6 +83,7 @@ gss_OID *		output_name_type;
 {
     OM_uint32		major_status;
     gss_union_name_t	union_name;
+    int i;
 
     major_status = val_dsp_name_args(minor_status, input_name,
 				     output_name_buffer, output_name_type);
@@ -91,15 +92,14 @@ gss_OID *		output_name_type;
 
     union_name = (gss_union_name_t) input_name;
 
-    if (union_name->mech_type) {
-	/*
-	 * OK, we have a mechanism-specific name; let's use it!
-	 */
-	return (gssint_display_internal_name(minor_status,
-					    union_name->mech_type,
-					    union_name->mech_name,
-					    output_name_buffer,
-					    output_name_type));
+    for (i = 0; i < union_name->num_mechs; i++) {
+        major_status = gssint_display_internal_name(minor_status,
+                                                    union_name->mech_type[i],
+                                                    union_name->mech_name[i],
+                                                    output_name_buffer,
+                                                    output_name_type);
+        if (major_status == GSS_S_COMPLETE)
+            return major_status;
     }
 
     /*

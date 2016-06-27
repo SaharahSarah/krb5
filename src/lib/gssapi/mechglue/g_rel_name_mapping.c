@@ -36,6 +36,7 @@ gss_release_any_name_mapping(OM_uint32 *minor_status,
     OM_uint32           status;
     gss_union_name_t    union_name;
     gss_mechanism       mech;
+    int i;
 
     if (minor_status == NULL)
         return GSS_S_CALL_INACCESSIBLE_WRITE;
@@ -53,22 +54,30 @@ gss_release_any_name_mapping(OM_uint32 *minor_status,
 
     union_name = (gss_union_name_t)name;
 
-    if (union_name->mech_type == GSS_C_NO_OID)
-        return GSS_S_UNAVAILABLE;
+    status = GSS_S_UNAVAILABLE;
 
-    mech = gssint_get_mechanism(name->mech_type);
-    if (mech == NULL)
-        return GSS_S_BAD_NAME;
+    for (i = 0; i < union_name->num_mechs; i++) {
+        if (union_name->mech_type[i] == GSS_C_NO_OID)
+            continue;
 
-    if (mech->gss_release_any_name_mapping == NULL)
-        return GSS_S_UNAVAILABLE;
+        mech = gssint_get_mechanism(name->mech_type[i]);
+        if (mech == NULL) {
+            status = GSS_S_BAD_NAME;
+            continue;
+        }
 
-    status = (*mech->gss_release_any_name_mapping)(minor_status,
-                                                   union_name->mech_name,
-                                                   type_id,
-                                                   input);
-    if (status != GSS_S_COMPLETE)
-        map_error(minor_status, mech);
+        if (mech->gss_release_any_name_mapping == NULL)
+            continue;
+
+        status = (*mech->gss_release_any_name_mapping)(minor_status,
+                                                    union_name->mech_name,
+                                                    type_id,
+                                                    input);
+        if (status != GSS_S_COMPLETE)
+            map_error(minor_status, mech);
+        else
+            break;
+    }
 
     return status;
 }

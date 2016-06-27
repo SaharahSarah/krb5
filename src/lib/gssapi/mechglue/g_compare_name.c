@@ -95,8 +95,8 @@ int *			name_equal;
      * If union_name1 is mechanism specific, then fetch its mechanism
      * information.
      */
-    if (union_name1->mech_type) {
-	mech = gssint_get_mechanism (union_name1->mech_type);
+    if (union_name1->num_mechs > 0) {
+	mech = gssint_get_mechanism(union_name1->mech_type[0]);
 	if (!mech)
 	    return (GSS_S_BAD_MECH);
 	if (!mech->gss_compare_name)
@@ -108,8 +108,8 @@ int *			name_equal;
     /*
      * First case... both names are mechanism-specific
      */
-    if (union_name1->mech_type && union_name2->mech_type) {
-	if (!g_OID_equal(union_name1->mech_type, union_name2->mech_type))
+    if (union_name1->num_mechs > 0 && union_name2->num_mechs > 0) {
+	if (!g_OID_equal(union_name1->mech_type[0], union_name2->mech_type[0]))
 	    return (GSS_S_COMPLETE);
 	if ((union_name1->mech_name == 0) || (union_name2->mech_name == 0))
 	    /* should never happen */
@@ -119,8 +119,8 @@ int *			name_equal;
 	if (!mech->gss_compare_name)
 	    return (GSS_S_UNAVAILABLE);
 	major_status = mech->gss_compare_name(minor_status,
-					      union_name1->mech_name,
-					      union_name2->mech_name,
+					      union_name1->mech_name[0],
+					      union_name2->mech_name[0],
 					      name_equal);
 	if (major_status != GSS_S_COMPLETE)
 	    map_error(minor_status, mech);
@@ -137,7 +137,7 @@ int *			name_equal;
      * know what mechanism to use for calling the underlying
      * gss_import_name().
      */
-    if (!union_name1->mech_type && !union_name2->mech_type) {
+    if (union_name1->num_mechs == 0 && union_name2->num_mechs == 0) {
 		/*
 		 * Second case, first sub-case... one name has null
 		 * name_type, the other doesn't.
@@ -182,13 +182,13 @@ int *			name_equal;
      * can't import the general name, then we return that the name is
      * _NOT_ equal.
      */
-    if (union_name2->mech_type) {
+    if (union_name2->num_mechs > 0) {
 	/* We make union_name1 the mechanism specific name. */
 	union_name1 = (gss_union_name_t) name2;
 	union_name2 = (gss_union_name_t) name1;
     }
     major_status = gssint_import_internal_name(minor_status,
-					      union_name1->mech_type,
+					      union_name1->mech_type[0],
 					      union_name2,
 					      &internal_name);
     if (major_status != GSS_S_COMPLETE)
@@ -199,11 +199,11 @@ int *			name_equal;
     if (!mech->gss_compare_name)
 	return (GSS_S_UNAVAILABLE);
     major_status = mech->gss_compare_name(minor_status,
-					  union_name1->mech_name,
+					  union_name1->mech_name[0],
 					  internal_name, name_equal);
     if (major_status != GSS_S_COMPLETE)
 	map_error(minor_status, mech);
-    gssint_release_internal_name(&temp_minor, union_name1->mech_type,
+    gssint_release_internal_name(&temp_minor, union_name1->mech_type[0],
 				&internal_name);
     return (major_status);
 

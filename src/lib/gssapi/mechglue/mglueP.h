@@ -38,11 +38,12 @@ typedef struct gss_name_struct {
 	gss_OID			name_type;
 	gss_buffer_t		external_name;
 	/*
-	 * These last two fields are only filled in for mechanism
+	 * These last fields are only filled in for mechanism
 	 * names.
 	 */
-	gss_OID			mech_type;
-	gss_name_t		mech_name;
+	int num_mechs;
+	gss_OID			*mech_type;
+	gss_name_t		*mech_name;
 } gss_union_name_desc, *gss_union_name_t;
 
 /*

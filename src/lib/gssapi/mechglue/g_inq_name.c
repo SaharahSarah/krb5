@@ -37,7 +37,7 @@ gss_inquire_name(OM_uint32 *minor_status,
     OM_uint32           status, tmp;
     gss_union_name_t    union_name;
     gss_mechanism       mech;
-
+    int i;
     if (minor_status == NULL)
         return GSS_S_CALL_INACCESSIBLE_WRITE;
 
@@ -53,43 +53,47 @@ gss_inquire_name(OM_uint32 *minor_status,
     *minor_status = 0;
     union_name = (gss_union_name_t)name;
 
-    if (union_name->mech_type == GSS_C_NO_OID) {
-        /* We don't yet support non-mechanism attributes */
-        if (name_is_MN != NULL)
-            *name_is_MN = 0;
-        *minor_status = 0;
-        return GSS_S_COMPLETE;
-    }
-
+    status = GSS_S_UNAVAILABLE;
+    *minor_status = 0;
     if (name_is_MN != NULL)
-        *name_is_MN = 1;
+        *name_is_MN = 0;
 
-    if (MN_mech != NULL) {
-        status = generic_gss_copy_oid(minor_status,
-                                      union_name->mech_type,
-                                      MN_mech);
-        if (GSS_ERROR(status))
-            return status;
-    }
+    for (i = 0; i < union_name->num_mechs; i++) {
+        if (union_name->mech_type[i] == GSS_C_NO_OID) {
+            /* We don't yet support non-mechanism attributes */
+            if (name_is_MN != NULL)
+                *name_is_MN = 0;
+            *minor_status = 0;
+            status = GSS_S_COMPLETE;
+            continue;
+        }
 
-    mech = gssint_get_mechanism(name->mech_type);
-    if (mech == NULL) {
-        gss_release_oid(&tmp, MN_mech);
-        return GSS_S_BAD_NAME;
-    }
+        mech = gssint_get_mechanism(name->mech_type[i]);
+        if (mech == NULL) {
+            status = GSS_S_BAD_NAME;
+            continue;
+        }
 
-    if (mech->gss_inquire_name == NULL) {
-        gss_release_oid(&tmp, MN_mech);
-        return GSS_S_UNAVAILABLE;
-    }
+        if (mech->gss_inquire_name == NULL) {
+            status = GSS_S_UNAVAILABLE;
+            continue;
+        }
 
-    status = (*mech->gss_inquire_name)(minor_status,
-                                       union_name->mech_name,
-                                       NULL,
-                                       NULL,
-                                       attrs);
-    if (status != GSS_S_COMPLETE) {
-        generic_gss_release_oid(&tmp, MN_mech);
+        status = (*mech->gss_inquire_name)(minor_status,
+                                           union_name->mech_name[i],
+                                           NULL,
+                                           NULL,
+                                           attrs);
+        if (status == GSS_S_COMPLETE) {
+            if (name_is_MN != NULL)
+                *name_is_MN = 1;
+            if (MN_mech != NULL) {
+                status = generic_gss_copy_oid(minor_status,
+                                              union_name->mech_type[i],
+                                              MN_mech);
+            }
+            break;
+        }
         map_error(minor_status, mech);
     }
 
