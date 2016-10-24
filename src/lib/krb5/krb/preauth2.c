@@ -46,11 +46,11 @@
 typedef struct {
     struct krb5_clpreauth_vtable_st vt;
     krb5_clpreauth_moddata data;
-    krb5_clpreauth_modreq req;
+/*    krb5_clpreauth_modreq req; */
 } *clpreauth_handle;
 
 struct krb5_preauth_context_st {
-    krb5_preauthtype *tried;
+/*    krb5_preauthtype *tried; */
     clpreauth_handle *handles;
 };
 
@@ -164,7 +164,6 @@ k5_init_preauth_context(krb5_context context)
     context->preauth_context = malloc(sizeof(struct krb5_preauth_context_st));
     if (context->preauth_context == NULL)
         goto cleanup;
-    context->preauth_context->tried = NULL;
     context->preauth_context->handles = list;
     list = NULL;
 
@@ -179,14 +178,13 @@ cleanup:
  * AS-REP).
  */
 void
-k5_reset_preauth_types_tried(krb5_context context)
+k5_reset_preauth_types_tried(krb5_init_creds_context ctx)
 {
-    struct krb5_preauth_context_st *pctx = context->preauth_context;
 
-    if (pctx == NULL)
+    if (ctx == NULL)
         return;
-    free(pctx->tried);
-    pctx->tried = NULL;
+    free(ctx->tried);
+    ctx->tried = NULL;
 }
 
 
@@ -200,7 +198,6 @@ k5_free_preauth_context(krb5_context context)
 
     if (pctx == NULL)
         return;
-    free(pctx->tried);
     free_handles(context, pctx->handles);
     free(pctx);
     context->preauth_context = NULL;
@@ -209,7 +206,8 @@ k5_free_preauth_context(krb5_context context)
 /* Initialize the per-AS-REQ context. This means calling the client_req_init
  * function to give the plugin a chance to allocate a per-request context. */
 void
-k5_preauth_request_context_init(krb5_context context)
+k5_preauth_request_context_init(krb5_context context,
+                                krb5_init_creds_context ctx)
 {
     struct krb5_preauth_context_st *pctx = context->preauth_context;
     clpreauth_handle *hp, h;
@@ -220,18 +218,19 @@ k5_preauth_request_context_init(krb5_context context)
         if (pctx == NULL)
             return;
     }
-    k5_reset_preauth_types_tried(context);
+    k5_reset_preauth_types_tried(ctx);
     for (hp = pctx->handles; *hp != NULL; hp++) {
         h = *hp;
         if (h->vt.request_init != NULL)
-            h->vt.request_init(context, h->data, &h->req);
+            h->vt.request_init(context, h->data, &ctx->pre_req);
     }
 }
 
 /* Free the per-AS-REQ context. This means clearing any request-specific
  * context which the plugin may have created. */
 void
-k5_preauth_request_context_fini(krb5_context context)
+k5_preauth_request_context_fini(krb5_context context,
+                                krb5_init_creds_context ctx)
 {
     struct krb5_preauth_context_st *pctx = context->preauth_context;
     clpreauth_handle *hp, h;
@@ -240,9 +239,9 @@ k5_preauth_request_context_fini(krb5_context context)
         return;
     for (hp = pctx->handles; *hp != NULL; hp++) {
         h = *hp;
-        if (h->req != NULL && h->vt.request_fini != NULL)
-            h->vt.request_fini(context, h->data, h->req);
-        h->req = NULL;
+        if (ctx->pre_req != NULL && h->vt.request_fini != NULL)
+            h->vt.request_fini(context, h->data, ctx->pre_req);
+        ctx->pre_req = NULL;
     }
 }
 
@@ -264,9 +263,10 @@ clpreauth_prep_questions(krb5_context context, clpreauth_handle h,
                          krb5_kdc_req *req, krb5_data *req_body,
                          krb5_data *prev_req, krb5_pa_data *pa_data)
 {
+    krb5_init_creds_context ctx = (krb5_init_creds_context) rock;
     if (h->vt.prep_questions == NULL)
         return 0;
-    return h->vt.prep_questions(context, h->data, h->req, opt, cb, rock, req,
+    return h->vt.prep_questions(context, h->data, ctx->pre_req, opt, cb, rock, req,
                                 req_body, prev_req, pa_data);
 }
 
@@ -278,7 +278,9 @@ clpreauth_process(krb5_context context, clpreauth_handle h,
                   krb5_pa_data *pa_data, krb5_prompter_fct prompter,
                   void *prompter_data, krb5_pa_data ***pa_data_out)
 {
-    return h->vt.process(context, h->data, h->req, opt, cb, rock, req,
+    krb5_init_creds_context ctx = (krb5_init_creds_context) rock;
+
+    return h->vt.process(context, h->data, ctx->pre_req, opt, cb, rock, req,
                          req_body, prev_req, pa_data, prompter, prompter_data,
                          pa_data_out);
 }
@@ -292,9 +294,11 @@ clpreauth_tryagain(krb5_context context, clpreauth_handle h,
                    krb5_pa_data **error_padata, krb5_prompter_fct prompter,
                    void *prompter_data, krb5_pa_data ***pa_data_out)
 {
+    krb5_init_creds_context ctx = (krb5_init_creds_context) rock;
+
     if (h->vt.tryagain == NULL)
         return 0;
-    return h->vt.tryagain(context, h->data, h->req, opt, cb, rock, req,
+    return h->vt.tryagain(context, h->data, ctx->pre_req, opt, cb, rock, req,
                           req_body, prev_req, pa_type, error, error_padata,
                           prompter, prompter_data, pa_data_out);
 }
@@ -554,9 +558,8 @@ pa_type_allowed(krb5_init_creds_context ctx, krb5_preauthtype pa_type)
  * types and return false.
  */
 static krb5_boolean
-already_tried(krb5_context context, krb5_preauthtype pa_type)
+already_tried(krb5_init_creds_context pctx, krb5_preauthtype pa_type)
 {
-    struct krb5_preauth_context_st *pctx = context->preauth_context;
     size_t count;
     krb5_preauthtype *newptr;
 
@@ -605,7 +608,7 @@ process_pa_data(krb5_context context, krb5_init_creds_context ctx,
             if (clpreauth_is_real(context, h, pa->pa_type) != real)
                 continue;
             /* Only try a real mechanism once per authentication. */
-            if (real && already_tried(context, pa->pa_type))
+            if (real && already_tried(ctx, pa->pa_type))
                 continue;
             mod_pa = NULL;
             ret = clpreauth_process(context, h, ctx->opt, &callbacks,

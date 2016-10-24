@@ -6,6 +6,8 @@
 #include "k5-json.h"
 #include "int-proto.h"
 
+typedef struct krb5_clpreauth_modreq_st *krb5_clpreauth_modreq;
+
 struct krb5_responder_context_st {
     k5_response_items *items;
 };
@@ -35,6 +37,10 @@ struct _krb5_init_creds_context {
     krb5_creds cred;
     krb5_kdc_req *request;
     krb5_kdc_rep *reply;
+
+    krb5_clpreauth_modreq pre_req;
+    krb5_preauthtype *tried;
+
     /**
      * Stores the outer request body in order to feed into FAST for
      * checksumming.  This is maintained even if FAST is not used. This is not
